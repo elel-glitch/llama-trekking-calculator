@@ -1,0 +1,106 @@
+<script>
+    function calculateTrip(llamas, totalGearWeight, tripDays, includePellets) {
+        let pelletsTotal = 0;
+        if (includePellets) {
+            pelletsTotal = llamas.length * 0.5 * tripDays;
+        }
+
+        let startingGearWeight = totalGearWeight + pelletsTotal;
+
+        let totalLlamaWeight = 0;
+        for (let llama of llamas) {
+            totalLlamaWeight = totalLlamaWeight + llama.weight;
+        }
+
+        let herdPercent = (startingGearWeight / totalLlamaWeight) * 100;
+
+        for (let llama of llamas) {
+            let share = llama.weight / totalLlamaWeight;
+            let safeMin = llama.weight * 0.20;
+            let safeMax = llama.weight * 0.25;
+
+            let startingLoad = share * startingGearWeight;
+            llama.load = startingLoad;
+
+            if (startingLoad > safeMax) {
+                llama.status = "🔴 Overloaded";
+            } else if (startingLoad >= safeMin) {
+                llama.status = "🟡 Standard Pack Load";
+            } else {
+                llama.status = "🟢 Optimal Pack Load";
+            }
+        }
+
+        // Check if any llama is overloaded
+        let anyOverloaded = false;
+        for (let llama of llamas) {
+            if (llama.status === "🔴 Overloaded") {
+                anyOverloaded = true;
+            }
+        }
+
+        let herdInsight = null;
+
+        if (anyOverloaded) {
+            herdInsight = "⚠️ Warning: The herd is overloaded. Consider adding another llama, removing non-essential gear, or shortening the trek duration to reduce supply weight.";
+
+        } else if (llamas[0].status === "🟢 Optimal Pack Load") {
+            herdInsight = "✅ The herd is comfortably within the optimal load zone for this entire trip.";
+
+        } else if (includePellets && llamas[0].status === "🟡 Standard Pack Load") {
+            let transitionDay = null;
+
+            for (let day = 1; day <= tripDays; day++) {
+                let pelletsEatenSoFar = llamas.length * 0.5 * day;
+                let remainingPellets = pelletsTotal - pelletsEatenSoFar;
+                if (remainingPellets < 0) {
+                    remainingPellets = 0;
+                }
+
+                let gearOnThisDay = totalGearWeight + remainingPellets;
+                let herdPercentOnThisDay = (gearOnThisDay / totalLlamaWeight) * 100;
+
+                if (herdPercentOnThisDay < 20) {
+                    transitionDay = day;
+                    break;
+                }
+            }
+
+            if (transitionDay) {
+                herdInsight = "The herd is carrying a normal working load. With pellet consumption enabled, the pack load will enter the 🟢 Optimal Zone on Day " + transitionDay + ".";
+            } else {
+                herdInsight = "The herd will remain in the 🟡 Standard Zone for the entire duration of the trip.";
+            }
+        }
+
+        // ---- Output ----
+        if (pelletsTotal > 0) {
+            console.log("Total Load:", totalGearWeight, "kg gear +", pelletsTotal.toFixed(1), "kg pellets =", (totalGearWeight + pelletsTotal).toFixed(1), "kg");
+        } else {
+            console.log("Total Load:", totalGearWeight, "kg gear (no pellets included)");
+        }
+        console.log("Herd load:", herdPercent.toFixed(1), "% of body weight each");
+        console.log("");
+
+        for (let llama of llamas) {
+            console.log("🦙", llama.name, "(" + llama.weight + " kg Llama)");
+            console.log("  Current Load:", llama.load.toFixed(1), "kg");
+            console.log("  Status:", llama.status);
+            console.log("");
+        }
+
+        if (herdInsight) {
+            console.log("Smart Insight:", herdInsight);
+        }
+
+        return llamas;
+    }
+
+    // ---- Test it ----
+    let llamas = [
+        { name: "Kuzco", weight: 160 },
+        { name: "Paco", weight: 140 }
+    ];
+
+    calculateTrip(llamas, 20, 8, true);
+</script>
