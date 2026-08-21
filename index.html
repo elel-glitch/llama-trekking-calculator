@@ -1,106 +1,523 @@
-<script>
-    function calculateTrip(llamas, totalGearWeight, tripDays, includePellets) {
-        let pelletsTotal = 0;
-        if (includePellets) {
-            pelletsTotal = llamas.length * 0.5 * tripDays;
-        }
-
-        let startingGearWeight = totalGearWeight + pelletsTotal;
-
-        let totalLlamaWeight = 0;
-        for (let llama of llamas) {
-            totalLlamaWeight = totalLlamaWeight + llama.weight;
-        }
-
-        let herdPercent = (startingGearWeight / totalLlamaWeight) * 100;
-
-        for (let llama of llamas) {
-            let share = llama.weight / totalLlamaWeight;
-            let safeMin = llama.weight * 0.20;
-            let safeMax = llama.weight * 0.25;
-
-            let startingLoad = share * startingGearWeight;
-            llama.load = startingLoad;
-
-            if (startingLoad > safeMax) {
-                llama.status = "🔴 Overloaded";
-            } else if (startingLoad >= safeMin) {
-                llama.status = "🟡 Standard Pack Load";
-            } else {
-                llama.status = "🟢 Optimal Pack Load";
-            }
-        }
-
-        // Check if any llama is overloaded
-        let anyOverloaded = false;
-        for (let llama of llamas) {
-            if (llama.status === "🔴 Overloaded") {
-                anyOverloaded = true;
-            }
-        }
-
-        let herdInsight = null;
-
-        if (anyOverloaded) {
-            herdInsight = "⚠️ Warning: The herd is overloaded. Consider adding another llama, removing non-essential gear, or shortening the trek duration to reduce supply weight.";
-
-        } else if (llamas[0].status === "🟢 Optimal Pack Load") {
-            herdInsight = "✅ The herd is comfortably within the optimal load zone for this entire trip.";
-
-        } else if (includePellets && llamas[0].status === "🟡 Standard Pack Load") {
-            let transitionDay = null;
-
-            for (let day = 1; day <= tripDays; day++) {
-                let pelletsEatenSoFar = llamas.length * 0.5 * day;
-                let remainingPellets = pelletsTotal - pelletsEatenSoFar;
-                if (remainingPellets < 0) {
-                    remainingPellets = 0;
-                }
-
-                let gearOnThisDay = totalGearWeight + remainingPellets;
-                let herdPercentOnThisDay = (gearOnThisDay / totalLlamaWeight) * 100;
-
-                if (herdPercentOnThisDay < 20) {
-                    transitionDay = day;
-                    break;
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Llama Trekking Logistics Calculator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: '#22314F',
+                        cream: '#F6F1E4',
+                        paper: '#FFFDF8',
+                        ochre: '#C98A2C',
+                        brick: '#A6453A',
+                        sage: '#7C9070',
+                        charcoal: '#3A342C'
+                    },
+                    fontFamily: {
+                        display: ['Fraunces', 'serif'],
+                        body: ['Inter', 'sans-serif'],
+                        mono: ['IBM Plex Mono', 'monospace']
+                    }
                 }
             }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #F6F1E4;
+            background-image: radial-gradient(circle at 1px 1px, rgba(58,52,44,0.08) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        .manifest-card { background-color: #FFFDF8; }
+        .perforation { border-top: 2px dashed #3A342C33; }
 
-            if (transitionDay) {
-                herdInsight = "The herd is carrying a normal working load. With pellet consumption enabled, the pack load will enter the 🟢 Optimal Zone on Day " + transitionDay + ".";
+        .llama-tag {
+            position: relative;
+            background-color: #FFFDF8;
+            border: 2px dashed #C98A2C88;
+            animation: slideDown 0.25s ease-out forwards;
+        }
+        .llama-tag::before {
+            content: "";
+            position: absolute;
+            top: 12px;
+            left: -8px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: #F6F1E4;
+            border: 2px dashed #C98A2C88;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        input[type="text"], input[type="number"] {
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .status-chip {
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 0.8em;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: 0.03em;
+        }
+        .status-optimal { background-color: #dcfce7; color: #15803d; }
+        .status-standard { background-color: #fef3c7; color: #b45309; }
+        .status-overload { background-color: #fee2e2; color: #b91c1c; }
+
+        button { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        button:not(:disabled):hover { transform: translateY(-2px); }
+        button:not(:disabled):active { transform: translateY(0); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .unit-btn-active { background-color: #C98A2C; color: #F6F1E4; }
+        .unit-btn-inactive { background-color: transparent; color: #C98A2C; }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .results-fade-in { animation: fadeInUp 0.35s ease-out forwards; }
+    </style>
+</head>
+<body class="min-h-screen py-10 px-4 font-body text-charcoal">
+
+    <div class="max-w-2xl mx-auto manifest-card rounded-lg shadow-lg border border-charcoal/10 overflow-hidden">
+
+        <div class="bg-ink text-cream px-8 py-6">
+            <h1 class="font-display text-3xl font-semibold tracking-wide">Llama Trekking Logistics Calculator</h1>
+            <p class="font-mono text-xs text-ochre mb-1 mt-1">Optimize gear weight and feed logistics for your four-legged friends!</p>
+        </div>
+        <div class="flex justify-center gap-3 py-2 bg-ink">
+            <span class="w-3 h-3 rounded-full bg-ochre"></span>
+            <span class="w-3 h-3 rounded-full bg-brick"></span>
+            <span class="w-3 h-3 rounded-full bg-sage"></span>
+            <span class="w-3 h-3 rounded-full bg-ochre"></span>
+            <span class="w-3 h-3 rounded-full bg-brick"></span>
+        </div>
+
+        <div class="px-8 py-6 space-y-5">
+
+            <div class="flex items-center gap-2">
+                <span class="font-mono text-xs uppercase tracking-wide text-charcoal/70">Units:</span>
+                <button id="unitKgBtn" onclick="setUnit('kg')" class="unit-btn-active px-3 py-1 text-xs font-mono rounded-md border border-ochre transition">KG</button>
+                <button id="unitLbBtn" onclick="setUnit('lb')" class="unit-btn-inactive px-3 py-1 text-xs font-mono rounded-md border border-ochre transition">LBS</button>
+            </div>
+
+            <div>
+                <label class="block font-mono text-xs uppercase tracking-wide text-charcoal/70 mb-1">Total Gear Weight (<span id="gearUnitLabel">kg</span>)</label>
+                <input type="number" id="gearWeightInput" value="25" min="0" onchange="saveState()"
+                    class="w-full border border-charcoal/20 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ochre">
+            </div>
+
+            <div>
+                <label class="block font-mono text-xs uppercase tracking-wide text-charcoal/70 mb-1">Trip Duration (days)</label>
+                <input type="number" id="tripDaysInput" value="1" min="1" max="45" onchange="clampDays(this)"
+                    class="w-full border border-charcoal/20 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ochre">
+                <p id="daysCapMsg" class="text-sm text-brick mt-1"></p>
+            </div>
+
+            <label class="flex items-center gap-2 font-body text-sm">
+                <input type="checkbox" id="includePelletsInput" checked onchange="saveState()" class="w-4 h-4 accent-ochre">
+                Include Pellets?
+            </label>
+        </div>
+
+        <div class="perforation mx-8"></div>
+
+        <div class="px-8 py-6">
+            <h3 class="font-display text-lg font-semibold text-ink mb-4">Llamas</h3>
+            <div id="llamaContainer" class="space-y-3"></div>
+
+            <div class="flex items-center gap-3 mt-4">
+                <button id="addLlamaBtn" onclick="addLlama()"
+                    class="border-2 border-dashed border-ochre text-ochre font-mono text-sm px-4 py-2 rounded-md hover:bg-ochre/10 transition">
+                    + Add Llama
+                </button>
+                <p id="llamaLimitMsg" class="text-sm text-brick"></p>
+            </div>
+        </div>
+
+        <div class="perforation mx-8"></div>
+
+        <div class="px-8 py-6">
+            <button onclick="runCalculation()"
+                class="w-full bg-brick text-cream font-mono uppercase tracking-wide text-sm font-semibold py-3 rounded-md hover:bg-brick/90 transition">
+                Calculate
+            </button>
+            <p id="gearCapMsg" class="text-sm text-brick mt-2"></p>
+            <div id="resultOutput" class="mt-5 space-y-2 font-body text-sm"></div>
+
+            <button id="copyBtn" onclick="copyTripPlan()"
+                class="hidden mt-3 text-xs font-mono border border-ink/30 text-ink px-3 py-2 rounded-md hover:bg-ink/5 transition">
+                📋 Copy Trip Plan
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        let llamaCount = 0;
+        const FUN_NAMES = ["Kuzco", "Paco", "Fernando", "Llama Del Rey", "Pacco", "Chino", "Enrico", "Fleeceanor", "Picchu", "Lola"];
+        const MAX_LLAMAS = 10;
+        const MIN_LLAMAS = 1;
+        const MIN_LLAMA_WEIGHT = 70;
+        const MAX_LLAMA_WEIGHT = 250;
+        const MIN_DAYS = 1;
+        const MAX_DAYS = 45;
+        const KG_TO_LB = 2.20462;
+        let currentUnit = "kg";
+        let lastTripSummaryText = "";
+
+        function setUnit(unit) {
+            if (unit === currentUnit) { saveState(); return; }
+
+            let gearInput = document.getElementById("gearWeightInput");
+            let gearVal = Number(gearInput.value);
+            gearVal = (unit === "lb") ? gearVal * KG_TO_LB : gearVal / KG_TO_LB;
+            gearInput.value = Math.round(gearVal * 10) / 10;
+
+            let weightInputs = document.getElementsByClassName("llama-weight");
+            for (let input of weightInputs) {
+                let val = Number(input.value);
+                val = (unit === "lb") ? val * KG_TO_LB : val / KG_TO_LB;
+                input.value = Math.round(val);
+            }
+
+            let minVal = (unit === "lb") ? Math.round(MIN_LLAMA_WEIGHT * KG_TO_LB) : MIN_LLAMA_WEIGHT;
+            let maxVal = (unit === "lb") ? Math.round(MAX_LLAMA_WEIGHT * KG_TO_LB) : MAX_LLAMA_WEIGHT;
+            for (let input of weightInputs) {
+                input.min = minVal;
+                input.max = maxVal;
+            }
+
+            let unitLabels = document.getElementsByClassName("weight-unit-label");
+            for (let label of unitLabels) {
+                label.innerText = (unit === "lb") ? "lbs" : "kg";
+            }
+            document.getElementById("gearUnitLabel").innerText = (unit === "lb") ? "lbs" : "kg";
+
+            currentUnit = unit;
+            updateUnitButtons();
+            saveState();
+        }
+
+        function updateUnitButtons() {
+            let kgBtn = document.getElementById("unitKgBtn");
+            let lbBtn = document.getElementById("unitLbBtn");
+            if (currentUnit === "kg") {
+                kgBtn.className = "unit-btn-active px-3 py-1 text-xs font-mono rounded-md border border-ochre transition";
+                lbBtn.className = "unit-btn-inactive px-3 py-1 text-xs font-mono rounded-md border border-ochre transition";
             } else {
-                herdInsight = "The herd will remain in the 🟡 Standard Zone for the entire duration of the trip.";
+                lbBtn.className = "unit-btn-active px-3 py-1 text-xs font-mono rounded-md border border-ochre transition";
+                kgBtn.className = "unit-btn-inactive px-3 py-1 text-xs font-mono rounded-md border border-ochre transition";
             }
         }
 
-        // ---- Output ----
-        if (pelletsTotal > 0) {
-            console.log("Total Load:", totalGearWeight, "kg gear +", pelletsTotal.toFixed(1), "kg pellets =", (totalGearWeight + pelletsTotal).toFixed(1), "kg");
-        } else {
-            console.log("Total Load:", totalGearWeight, "kg gear (no pellets included)");
+        function addLlama(presetName, presetWeight) {
+            if (llamaCount >= MAX_LLAMAS) { return; }
+            llamaCount++;
+
+            let defaultWeightKg = 150;
+            let displayWeight = (presetWeight !== undefined) ? presetWeight : ((currentUnit === "lb") ? Math.round(defaultWeightKg * KG_TO_LB) : defaultWeightKg);
+            let minDisplay = (currentUnit === "lb") ? Math.round(MIN_LLAMA_WEIGHT * KG_TO_LB) : MIN_LLAMA_WEIGHT;
+            let maxDisplay = (currentUnit === "lb") ? Math.round(MAX_LLAMA_WEIGHT * KG_TO_LB) : MAX_LLAMA_WEIGHT;
+            let unitText = (currentUnit === "lb") ? "lbs" : "kg";
+            let fallbackName = FUN_NAMES[(llamaCount - 1) % FUN_NAMES.length];
+            let nameValueAttr = (presetName !== undefined && presetName !== "") ? " value='" + presetName + "'" : "";
+
+            let row = document.createElement("div");
+            row.className = "llama-tag rounded-md px-4 py-3 flex items-center gap-2 flex-wrap";
+            row.innerHTML =
+                "<span class='inline-block hover:animate-bounce cursor-default'>🦙</span> " +
+                "<input type='text' class='llama-name flex-1 min-w-[100px] border border-charcoal/20 rounded px-2 py-1 text-sm' placeholder='e.g. " + fallbackName + "'" + nameValueAttr + " onchange='saveState()'> " +
+                "<input type='number' class='llama-weight w-24 border border-charcoal/20 rounded px-2 py-1 text-sm' placeholder='Weight' value='" + displayWeight + "' min='" + minDisplay + "' max='" + maxDisplay + "' step='1' onchange='clampWeight(this)'> " +
+                "<span class='weight-unit-label text-xs text-charcoal/60 font-mono'>" + unitText + "</span> " +
+                "<button class='remove-btn text-xs font-mono text-brick border border-brick/40 rounded px-2 py-1 hover:bg-brick/10' onclick='removeLlama(this)'>Remove</button>";
+
+            document.getElementById("llamaContainer").appendChild(row);
+            updateButtonStates();
+            saveState();
         }
-        console.log("Herd load:", herdPercent.toFixed(1), "% of body weight each");
-        console.log("");
 
-        for (let llama of llamas) {
-            console.log("🦙", llama.name, "(" + llama.weight + " kg Llama)");
-            console.log("  Current Load:", llama.load.toFixed(1), "kg");
-            console.log("  Status:", llama.status);
-            console.log("");
+        function clampWeight(input) {
+            let value = Math.round(Number(input.value));
+            let minVal = (currentUnit === "lb") ? Math.round(MIN_LLAMA_WEIGHT * KG_TO_LB) : MIN_LLAMA_WEIGHT;
+            let maxVal = (currentUnit === "lb") ? Math.round(MAX_LLAMA_WEIGHT * KG_TO_LB) : MAX_LLAMA_WEIGHT;
+            if (value < minVal) { value = minVal; }
+            else if (value > maxVal) { value = maxVal; }
+            input.value = value;
+            saveState();
         }
 
-        if (herdInsight) {
-            console.log("Smart Insight:", herdInsight);
+        function clampDays(input) {
+            let value = Number(input.value);
+            let msg = document.getElementById("daysCapMsg");
+            if (value > MAX_DAYS) {
+                input.value = MAX_DAYS;
+                msg.innerText = "💡 For multi-month expeditions, calculate load per resupply leg.";
+            } else if (value < MIN_DAYS) {
+                input.value = MIN_DAYS;
+                msg.innerText = "";
+            } else {
+                msg.innerText = "";
+            }
+            saveState();
         }
 
-        return llamas;
-    }
+        function removeLlama(button) {
+            if (llamaCount <= MIN_LLAMAS) { return; }
+            let row = button.parentElement;
+            row.remove();
+            llamaCount--;
+            updateButtonStates();
+            saveState();
+        }
 
-    // ---- Test it ----
-    let llamas = [
-        { name: "Kuzco", weight: 160 },
-        { name: "Paco", weight: 140 }
-    ];
+        function updateButtonStates() {
+            let addBtn = document.getElementById("addLlamaBtn");
+            let removeButtons = document.getElementsByClassName("remove-btn");
+            let limitMsg = document.getElementById("llamaLimitMsg");
 
-    calculateTrip(llamas, 20, 8, true);
-</script>
+            if (llamaCount >= MAX_LLAMAS) {
+                addBtn.disabled = true;
+                limitMsg.innerText = "Maximum of " + MAX_LLAMAS + " llamas reached.";
+            } else {
+                addBtn.disabled = false;
+                limitMsg.innerText = "";
+            }
+
+            for (let btn of removeButtons) {
+                btn.disabled = (llamaCount <= MIN_LLAMAS);
+            }
+        }
+
+        function saveState() {
+            let nameInputs = document.getElementsByClassName("llama-name");
+            let weightInputs = document.getElementsByClassName("llama-weight");
+
+            let llamaData = [];
+            for (let i = 0; i < nameInputs.length; i++) {
+                llamaData.push({ name: nameInputs[i].value, weight: weightInputs[i].value });
+            }
+
+            let state = {
+                gearWeight: document.getElementById("gearWeightInput").value,
+                tripDays: document.getElementById("tripDaysInput").value,
+                includePellets: document.getElementById("includePelletsInput").checked,
+                unit: currentUnit,
+                llamas: llamaData
+            };
+
+            try {
+                localStorage.setItem("llamaCalcState", JSON.stringify(state));
+            } catch (e) {
+                console.log("Could not save state:", e);
+            }
+        }
+
+        function loadState() {
+            let saved;
+            try {
+                saved = localStorage.getItem("llamaCalcState");
+            } catch (e) {
+                saved = null;
+            }
+
+            if (!saved) {
+                addLlama();
+                return;
+            }
+
+            let state = JSON.parse(saved);
+
+            currentUnit = state.unit || "kg";
+            updateUnitButtons();
+            document.getElementById("gearUnitLabel").innerText = (currentUnit === "lb") ? "lbs" : "kg";
+
+            document.getElementById("gearWeightInput").value = state.gearWeight;
+            document.getElementById("tripDaysInput").value = state.tripDays;
+            document.getElementById("includePelletsInput").checked = state.includePellets;
+
+            if (state.llamas && state.llamas.length > 0) {
+                for (let llama of state.llamas) {
+                    addLlama(llama.name, llama.weight);
+                }
+            } else {
+                addLlama();
+            }
+        }
+
+        function calculateTrip(llamas, totalGearWeight, tripDays, includePellets) {
+            let pelletsTotal = 0;
+            if (includePellets) { pelletsTotal = llamas.length * 0.5 * tripDays; }
+
+            let startingGearWeight = totalGearWeight + pelletsTotal;
+
+            let totalLlamaWeight = 0;
+            for (let llama of llamas) { totalLlamaWeight = totalLlamaWeight + llama.weight; }
+
+            let herdPercent = (startingGearWeight / totalLlamaWeight) * 100;
+
+            for (let llama of llamas) {
+                let share = llama.weight / totalLlamaWeight;
+                let safeMin = llama.weight * 0.20;
+                let safeMax = llama.weight * 0.25;
+                let startingLoad = share * startingGearWeight;
+                llama.load = startingLoad;
+
+                if (startingLoad > safeMax) {
+                    llama.status = "Overloaded";
+                    llama.statusClass = "status-overload";
+                } else if (startingLoad >= safeMin) {
+                    llama.status = "Standard";
+                    llama.statusClass = "status-standard";
+                } else {
+                    llama.status = "Optimal";
+                    llama.statusClass = "status-optimal";
+                }
+            }
+
+            let anyOverloaded = false;
+            for (let llama of llamas) {
+                if (llama.status === "Overloaded") { anyOverloaded = true; }
+            }
+
+            let herdInsight = null;
+            let herdInsightPlain = null;
+
+            if (anyOverloaded) {
+                herdInsight = "⚠️ Warning: The herd is overloaded. Consider adding another llama, removing non-essential gear, or shortening the trek duration to reduce supply weight.";
+                herdInsightPlain = herdInsight;
+            } else if (llamas[0].status === "Optimal") {
+                herdInsight = "✅ The herd is comfortably within the optimal load zone for this entire trip.";
+                herdInsightPlain = herdInsight;
+            } else if (includePellets && llamas[0].status === "Standard") {
+                let transitionDay = null;
+
+                for (let day = 1; day <= tripDays; day++) {
+                    let pelletsEatenSoFar = llamas.length * 0.5 * day;
+                    let remainingPellets = pelletsTotal - pelletsEatenSoFar;
+                    if (remainingPellets < 0) { remainingPellets = 0; }
+
+                    let gearOnThisDay = totalGearWeight + remainingPellets;
+                    let herdPercentOnThisDay = (gearOnThisDay / totalLlamaWeight) * 100;
+
+                    if (herdPercentOnThisDay < 20) {
+                        transitionDay = day;
+                        break;
+                    }
+                }
+
+                if (transitionDay) {
+                    herdInsight = "The herd is carrying a normal working load. With pellet consumption enabled, the pack load will enter the <span class='status-chip status-optimal'>Optimal Zone</span> on Day " + transitionDay + ".";
+                    herdInsightPlain = "The herd is carrying a normal working load. With pellet consumption enabled, the pack load will enter the Optimal Zone on Day " + transitionDay + ".";
+                } else {
+                    herdInsight = "The herd will remain in the Standard Zone for the entire duration of the trip.";
+                    herdInsightPlain = herdInsight;
+                }
+            }
+
+            return { llamas: llamas, pelletsTotal: pelletsTotal, herdInsight: herdInsight, herdInsightPlain: herdInsightPlain, herdPercent: herdPercent };
+        }
+
+        function runCalculation() {
+            let unitSuffix = (currentUnit === "lb") ? "lbs" : "kg";
+
+            let gearWeightRaw = Number(document.getElementById("gearWeightInput").value);
+            let tripDays = Number(document.getElementById("tripDaysInput").value);
+            let includePellets = document.getElementById("includePelletsInput").checked;
+            let gearCapMsg = document.getElementById("gearCapMsg");
+
+            if (gearWeightRaw < 0) {
+                gearWeightRaw = 0;
+                document.getElementById("gearWeightInput").value = 0;
+            }
+
+            let gearWeightKg = (currentUnit === "lb") ? gearWeightRaw / KG_TO_LB : gearWeightRaw;
+
+            let nameInputs = document.getElementsByClassName("llama-name");
+            let weightInputs = document.getElementsByClassName("llama-weight");
+
+            let llamas = [];
+            for (let i = 0; i < nameInputs.length; i++) {
+                let rawWeight = Number(weightInputs[i].value);
+                let weightKg = (currentUnit === "lb") ? rawWeight / KG_TO_LB : rawWeight;
+                let llamaName = nameInputs[i].value.trim() || ("Llama " + (i + 1));
+                llamas.push({ name: llamaName, weight: weightKg });
+            }
+
+            if (llamas.length === 0) {
+                document.getElementById("resultOutput").innerText = "Please add at least one llama.";
+                return;
+            }
+
+            let totalLlamaWeightKg = 0;
+            for (let llama of llamas) { totalLlamaWeightKg += llama.weight; }
+            let maxAllowedGearKg = totalLlamaWeightKg * 0.35;
+
+            if (gearWeightKg > maxAllowedGearKg) {
+                let maxAllowedDisplay = (currentUnit === "lb") ? maxAllowedGearKg * KG_TO_LB : maxAllowedGearKg;
+                gearCapMsg.innerText = "⚠️ Gear exceeds total physical capacity of the herd! Max allowed: " + maxAllowedDisplay.toFixed(1) + " " + unitSuffix + ".";
+                gearWeightKg = maxAllowedGearKg;
+                document.getElementById("gearWeightInput").value = maxAllowedDisplay.toFixed(1);
+            } else {
+                gearCapMsg.innerText = "";
+            }
+
+            let output = calculateTrip(llamas, gearWeightKg, tripDays, includePellets);
+            let toDisplay = (kgVal) => (currentUnit === "lb") ? kgVal * KG_TO_LB : kgVal;
+
+            let html = "<p class='font-mono text-xs text-charcoal/70'>Total Load: " + toDisplay(gearWeightKg).toFixed(1) + " " + unitSuffix + " gear + " + toDisplay(output.pelletsTotal).toFixed(1) + " " + unitSuffix + " pellets = <span class='font-semibold text-ink'>" + toDisplay(gearWeightKg + output.pelletsTotal).toFixed(1) + " " + unitSuffix + "</span></p>";
+            html += "<p class='font-mono text-xs text-charcoal/70 mb-3'>Herd load: " + output.herdPercent.toFixed(1) + "% of body weight each</p>";
+
+            let plainText = "🦙 Llama Trekking Plan\n";
+            plainText += "Total Load: " + toDisplay(gearWeightKg).toFixed(1) + " " + unitSuffix + " gear + " + toDisplay(output.pelletsTotal).toFixed(1) + " " + unitSuffix + " pellets = " + toDisplay(gearWeightKg + output.pelletsTotal).toFixed(1) + " " + unitSuffix + "\n";
+            plainText += "Herd load: " + output.herdPercent.toFixed(1) + "% of body weight each\n\n";
+
+            for (let llama of output.llamas) {
+                html += "<p class='flex items-center gap-2'>🦙 <span class='font-medium'>" + llama.name + "</span> <span class='font-mono text-xs text-charcoal/70'>" + toDisplay(llama.load).toFixed(1) + " " + unitSuffix + "</span> <span class='status-chip " + llama.statusClass + "'>" + llama.status + "</span></p>";
+                plainText += llama.name + ": " + toDisplay(llama.load).toFixed(1) + " " + unitSuffix + " — " + llama.status + "\n";
+            }
+
+            if (output.herdInsight) {
+                html += "<div class='mt-3 border border-dashed border-ochre/50 bg-ochre/5 rounded-md px-4 py-3 text-sm'><span class='font-semibold text-ink'>Smart Insight:</span> " + output.herdInsight + "</div>";
+                plainText += "\nSmart Insight: " + output.herdInsightPlain;
+            }
+
+            let resultBox = document.getElementById("resultOutput");
+            resultBox.classList.remove("results-fade-in");
+            void resultBox.offsetWidth;
+            resultBox.innerHTML = html;
+            resultBox.classList.add("results-fade-in");
+
+            lastTripSummaryText = plainText;
+            document.getElementById("copyBtn").classList.remove("hidden");
+
+            saveState();
+        }
+
+        function copyTripPlan() {
+            if (!lastTripSummaryText) { return; }
+            navigator.clipboard.writeText(lastTripSummaryText).then(() => {
+                let btn = document.getElementById("copyBtn");
+                let originalText = btn.innerText;
+                btn.innerText = "✅ Copied!";
+                setTimeout(() => { btn.innerText = originalText; }, 1500);
+            });
+        }
+
+        loadState();
+    </script>
+
+</body>
+</html>
